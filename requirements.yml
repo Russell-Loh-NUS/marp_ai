@@ -1,0 +1,10 @@
+name: cs5446-marp-ai
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - pip:
+    - gymnasium
+    - numpy
+    - stable_baselines3
+    - torch
