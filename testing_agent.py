@@ -4,12 +4,14 @@ from marp_ai_gym import *
 import numpy as np
 from stable_baselines3 import DQN, PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+import os
 
 def ppo_test():
     env = MarpAIGym(render_flag=True)  # Create the environment
     gym_env = DummyVecEnv([lambda: env])  # Use DummyVecEnv for vectorized environments
-
-    model = PPO.load('ppo_marp_ai_model.zip')  # Load the trained model
+    cwd = os.getcwd()
+    model_path = os.path.join(cwd, "saves", "sample_model.zip")
+    model = PPO.load(model_path)  # Load the trained model
     # Testing the agent
     n_episodes = 10  # Number of episodes to run
     scores = []  # Initialize a list to store episode scores

@@ -9,10 +9,13 @@ import random
 
 COLLISION_REWARD = -100
 INVALID_ACTION_REWARD = -10
-IDLE_REWARD = -2
-DEST_REACH_REWARD = 25
+IDLE_REWARD = -1
+DEST_REACH_REWARD = 50
 MAX_TIMESTEP = 50
-
+COMEOUT_FROM_DEST_REWARD = -10
+MOVING_AWAY_REWARD = -2
+RECENT_POSES_SIZE = 3
+CYCLIC_REWARD = -5
 
 class MarpAIGym(gym.Env):
     def __init__(self, render_flag=False):
@@ -52,12 +55,18 @@ class MarpAIGym(gym.Env):
         self.amr2_options = self.pad_waypoints(self.graph[self.amr2_pose])
         self.step_count = 0
         self.episode_total_score = 0
-        self.amr_1_distance_to_goal = self.dist(
+        self.amr1_last_distance_to_goal = 0.0
+        self.amr1_distance_to_goal = self.dist(
             self.amr1_pose[0], self.amr1_pose[1], self.amr1_dest[0], self.amr1_dest[1]
         )
-        self.amr_2_distance_to_goal = self.dist(
+        self.amr2_last_distance_to_goal = 0.0
+        self.amr2_distance_to_goal = self.dist(
             self.amr2_pose[0], self.amr2_pose[1], self.amr2_dest[0], self.amr2_dest[1]
         )
+        self.amr1_reached = False
+        self.amr2_reached = False
+        self.amr1_recent_poses = []
+        self.amr2_recent_poses = []
 
     def pad_waypoints(self, waypoints, max_size=5, pad_value=(-100, -100)):
         # pad waypoints with (-100, -100) until max_size is reached
@@ -73,8 +82,8 @@ class MarpAIGym(gym.Env):
                 list(self.amr1_dest),
                 list(self.amr2_pose),
                 list(self.amr2_dest),
-                [self.amr_1_distance_to_goal],
-                [self.amr_2_distance_to_goal],
+                [self.amr1_distance_to_goal],
+                [self.amr2_distance_to_goal],
                 [coord for waypoint in self.amr1_options for coord in waypoint],
                 [coord for waypoint in self.amr2_options for coord in waypoint],
             )
@@ -88,8 +97,6 @@ class MarpAIGym(gym.Env):
         terminated = False
         truncated = False
         reward = 0
-        amr1_reached = False
-        amr2_reached = False
 
         # Ignore movement if selecting the padded value (-100, -100), and apply penalty
         if amr1_next == (-100, -100):
@@ -97,22 +104,64 @@ class MarpAIGym(gym.Env):
         else:
             self.amr1_last_pose = self.amr1_pose
             self.amr1_pose = amr1_next
+            if self.amr1_pose != self.amr1_dest and self.amr1_pose in self.amr1_recent_poses:
+                print(f"amr 1 cyclic {self.amr1_pose}, recentposes: {self.amr1_recent_poses}")
+                print("amr 1 cyclic")
+                reward += CYCLIC_REWARD
+            if len(self.amr1_recent_poses) == RECENT_POSES_SIZE:
+                self.amr1_recent_poses.pop(0)
+            self.amr1_recent_poses.append(self.amr1_pose)
+
         if amr2_next == (-100, -100):
             reward += INVALID_ACTION_REWARD
         else:
             self.amr2_last_pose = self.amr2_pose
             self.amr2_pose = amr2_next
+            if self.amr2_pose != self.amr2_dest and self.amr2_pose in self.amr2_recent_poses:
+                print(f"amr 2 cyclic {self.amr2_pose}, recentposes: {self.amr2_recent_poses}")
+                print("amr 2 cyclic")
+                reward += CYCLIC_REWARD
+            if len(self.amr2_recent_poses) == RECENT_POSES_SIZE:
+                self.amr2_recent_poses.pop(0)
+            self.amr2_recent_poses.append(self.amr2_pose)
+        
+        # check for cyclic movement
+        #  self.amr1_pose in self.amr1_recent_poses:
+        
+        #  self.amr2_pose in self.amr2_recent_poses:
+        
+
+        if self.amr1_reached and self.amr1_pose != self.amr1_dest:
+            print("amr 1 comeout from dest")
+            reward += COMEOUT_FROM_DEST_REWARD
+        if self.amr2_reached and self.amr2_pose != self.amr2_dest:
+            print("amr 2 comeout from dest")
+            reward += COMEOUT_FROM_DEST_REWARD
 
         # calculate distance to goal
-        self.amr_1_distance_to_goal = self.dist(
+        self.amr1_last_distance_to_goal = self.amr1_distance_to_goal
+        self.amr1_distance_to_goal = self.dist(
             self.amr1_pose[0], self.amr1_pose[1], self.amr1_dest[0], self.amr1_dest[1]
         )
-        self.amr_2_distance_to_goal = self.dist(
+        self.amr2_last_distance_to_goal = self.amr2_distance_to_goal
+        self.amr2_distance_to_goal = self.dist(
             self.amr2_pose[0], self.amr2_pose[1], self.amr2_dest[0], self.amr2_dest[1]
         )
+        if self.amr1_distance_to_goal > self.amr1_last_distance_to_goal:
+            print("amr 1 moving away")
+            reward += MOVING_AWAY_REWARD
+        if self.amr2_distance_to_goal > self.amr2_last_distance_to_goal:
+            print("amr 2 moving away")
+            reward += MOVING_AWAY_REWARD
 
         # terminate on collision
         if self.amr1_pose == self.amr2_pose:
+            print("collision, terminate")
+            terminated = True
+            reward += COLLISION_REWARD
+        # swap = collision
+        if self.amr1_last_pose == self.amr2_pose and self.amr1_pose == self.amr2_last_pose:
+            print("swap, terminate")
             terminated = True
             reward += COLLISION_REWARD
 
@@ -123,17 +172,17 @@ class MarpAIGym(gym.Env):
             reward += IDLE_REWARD
 
         # reward for reaching destination
-        if self.amr1_pose == self.amr1_dest:
-            amr1_reached = True
+        if not self.amr1_reached and self.amr1_pose == self.amr1_dest:
+            self.amr1_reached = True
             print("solved amr1")
             reward += DEST_REACH_REWARD
-        if self.amr2_pose == self.amr2_dest:
-            amr2_reached = True
+        if not self.amr2_reached and self.amr2_pose == self.amr2_dest:
+            self.amr2_reached = True
             print("solved amr2")
             reward += DEST_REACH_REWARD
 
         # both amrs reached destination, terminate
-        if amr1_reached and amr2_reached:
+        if self.amr1_reached and self.amr2_reached:
             print("solved both, terminating")
             terminated = True
 
@@ -149,8 +198,8 @@ class MarpAIGym(gym.Env):
                 list(self.amr1_dest),
                 list(self.amr2_pose),
                 list(self.amr2_dest),
-                [self.amr_1_distance_to_goal],
-                [self.amr_2_distance_to_goal],
+                [self.amr1_distance_to_goal],
+                [self.amr2_distance_to_goal],
                 [coord for waypoint in self.amr1_options for coord in waypoint],
                 [coord for waypoint in self.amr2_options for coord in waypoint],
             )
