@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 
-COLLISION_REWARD = -100
-INVALID_ACTION_REWARD = -10
+COLLISION_REWARD = -60
+INVALID_ACTION_REWARD = -20
 IDLE_REWARD = -1
 DEST_REACH_REWARD = 50
-MAX_TIMESTEP = 50
 COMEOUT_FROM_DEST_REWARD = -10
 MOVING_AWAY_REWARD = -2
+CYCLIC_REWARD = -3
 RECENT_POSES_SIZE = 3
-CYCLIC_REWARD = -5
+MAX_TIMESTEP = 25
+
 
 class MarpAIGym(gym.Env):
     def __init__(self, render_flag=False):
@@ -23,13 +24,18 @@ class MarpAIGym(gym.Env):
         self.graph = self.create_graph()
         self.action_space = spaces.Discrete(25)  # 5 actions for each AMR
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0] + [-100] * 20, dtype=np.float32),
-            high=np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 10] + [10] * 20, dtype=np.float32),
-            shape=(30,),
+            low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, -1, -1] + [-100] * 20, dtype=np.float32),
+            high=np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 1, 1, 10, 1, 1] + [10] * 20, dtype=np.float32),
+            shape=(34,),
             dtype=np.float32,
         )  # amr poses, dest, distance to goal, waypoints, 30 elements
         self.renderflag = render_flag
-        self.init_val()
+        self.episode_count = 0
+        self.valid_waypoints = list(self.graph.keys())
+        self.picked_amr1_pose, self.picked_amr1_dest, self.picked_amr2_pose, self.picked_amr2_dest = (
+            self.pick_start_dest(self.valid_waypoints)
+        )
+        self.solved_counter = 0
 
     def create_graph(self):
         return {
@@ -46,11 +52,23 @@ class MarpAIGym(gym.Env):
 
     def init_val(self):
         self.amr1_last_pose = (-100, -100)
-        self.amr1_pose = (0, 2)
         self.amr2_last_pose = (-100, -100)
-        self.amr2_pose = (2, 0)
-        self.amr1_dest = (5, 2)
-        self.amr2_dest = (2, 3)
+        if self.solved_counter >= 200 or self.episode_count % 10000 == 0:
+            print("=============================================================================")
+            print(f"generating new data, episdode count: {self.episode_count}, solve counter: {self.solved_counter}")
+            self.picked_amr1_pose, self.picked_amr1_dest, self.picked_amr2_pose, self.picked_amr2_dest = (
+                self.pick_start_dest(self.valid_waypoints)
+            )
+            print(f"amr1: {self.picked_amr1_pose} -> {self.picked_amr1_dest}")
+            print(f"amr2: {self.picked_amr2_pose} -> {self.picked_amr2_dest}")
+            self.solved_counter = 0
+        self.amr1_pose, self.amr1_dest, self.amr2_pose, self.amr2_dest = (
+            self.picked_amr1_pose,
+            self.picked_amr1_dest,
+            self.picked_amr2_pose,
+            self.picked_amr2_dest,
+        )
+
         self.amr1_options = self.pad_waypoints(self.graph[self.amr1_pose])
         self.amr2_options = self.pad_waypoints(self.graph[self.amr2_pose])
         self.step_count = 0
@@ -67,6 +85,13 @@ class MarpAIGym(gym.Env):
         self.amr2_reached = False
         self.amr1_recent_poses = []
         self.amr2_recent_poses = []
+        self.episode_count += 1
+
+    def pick_start_dest(self, valid_waypoints):
+        amr1_start, amr1_dest = random.sample(valid_waypoints, 2)
+        crossing_candidates = [wp for wp in valid_waypoints if wp not in {amr1_start, amr1_dest}]
+        amr2_start, amr2_dest = random.sample(crossing_candidates, 2)
+        return amr1_start, amr1_dest, amr2_start, amr2_dest
 
     def pad_waypoints(self, waypoints, max_size=5, pad_value=(-100, -100)):
         # pad waypoints with (-100, -100) until max_size is reached
@@ -75,6 +100,13 @@ class MarpAIGym(gym.Env):
     def reset(self, seed=None):
         self.init_val()
 
+        amr1_direction = np.array(self.amr1_dest) - np.array(self.amr1_pose)
+        amr2_direction = np.array(self.amr2_dest) - np.array(self.amr2_pose)
+
+        # Normalize to get unit vectors
+        amr1_unit_vector = amr1_direction / np.linalg.norm(amr1_direction) if np.linalg.norm(amr1_direction) > 0 else np.array([0, 0])
+        amr2_unit_vector = amr2_direction / np.linalg.norm(amr2_direction) if np.linalg.norm(amr2_direction) > 0 else np.array([0, 0])
+        print(amr1_unit_vector, amr2_unit_vector)
         # Return the initial observation
         combined_array = np.concatenate(
             (
@@ -83,7 +115,9 @@ class MarpAIGym(gym.Env):
                 list(self.amr2_pose),
                 list(self.amr2_dest),
                 [self.amr1_distance_to_goal],
+                list(amr1_unit_vector),
                 [self.amr2_distance_to_goal],
+                list(amr2_unit_vector),
                 [coord for waypoint in self.amr1_options for coord in waypoint],
                 [coord for waypoint in self.amr2_options for coord in waypoint],
             )
@@ -105,8 +139,8 @@ class MarpAIGym(gym.Env):
             self.amr1_last_pose = self.amr1_pose
             self.amr1_pose = amr1_next
             if self.amr1_pose != self.amr1_dest and self.amr1_pose in self.amr1_recent_poses:
-                print(f"amr 1 cyclic {self.amr1_pose}, recentposes: {self.amr1_recent_poses}")
-                print("amr 1 cyclic")
+                # print(f"amr 1 cyclic {self.amr1_pose}, recentposes: {self.amr1_recent_poses}")
+                # print("amr 1 cyclic")
                 reward += CYCLIC_REWARD
             if len(self.amr1_recent_poses) == RECENT_POSES_SIZE:
                 self.amr1_recent_poses.pop(0)
@@ -118,24 +152,18 @@ class MarpAIGym(gym.Env):
             self.amr2_last_pose = self.amr2_pose
             self.amr2_pose = amr2_next
             if self.amr2_pose != self.amr2_dest and self.amr2_pose in self.amr2_recent_poses:
-                print(f"amr 2 cyclic {self.amr2_pose}, recentposes: {self.amr2_recent_poses}")
-                print("amr 2 cyclic")
+                # print(f"amr 2 cyclic {self.amr2_pose}, recentposes: {self.amr2_recent_poses}")
+                # print("amr 2 cyclic")
                 reward += CYCLIC_REWARD
             if len(self.amr2_recent_poses) == RECENT_POSES_SIZE:
                 self.amr2_recent_poses.pop(0)
             self.amr2_recent_poses.append(self.amr2_pose)
-        
-        # check for cyclic movement
-        #  self.amr1_pose in self.amr1_recent_poses:
-        
-        #  self.amr2_pose in self.amr2_recent_poses:
-        
 
         if self.amr1_reached and self.amr1_pose != self.amr1_dest:
-            print("amr 1 comeout from dest")
+            # print("amr 1 comeout from dest")
             reward += COMEOUT_FROM_DEST_REWARD
         if self.amr2_reached and self.amr2_pose != self.amr2_dest:
-            print("amr 2 comeout from dest")
+            # print("amr 2 comeout from dest")
             reward += COMEOUT_FROM_DEST_REWARD
 
         # calculate distance to goal
@@ -148,20 +176,20 @@ class MarpAIGym(gym.Env):
             self.amr2_pose[0], self.amr2_pose[1], self.amr2_dest[0], self.amr2_dest[1]
         )
         if self.amr1_distance_to_goal > self.amr1_last_distance_to_goal:
-            print("amr 1 moving away")
+            # print("amr 1 moving away")
             reward += MOVING_AWAY_REWARD
         if self.amr2_distance_to_goal > self.amr2_last_distance_to_goal:
-            print("amr 2 moving away")
+            # print("amr 2 moving away")
             reward += MOVING_AWAY_REWARD
 
         # terminate on collision
         if self.amr1_pose == self.amr2_pose:
-            print("collision, terminate")
+            # print("collision, terminate")
             terminated = True
             reward += COLLISION_REWARD
         # swap = collision
         if self.amr1_last_pose == self.amr2_pose and self.amr1_pose == self.amr2_last_pose:
-            print("swap, terminate")
+            # print("swap, terminate")
             terminated = True
             reward += COLLISION_REWARD
 
@@ -174,16 +202,17 @@ class MarpAIGym(gym.Env):
         # reward for reaching destination
         if not self.amr1_reached and self.amr1_pose == self.amr1_dest:
             self.amr1_reached = True
-            print("solved amr1")
+            # print("solved amr1")
             reward += DEST_REACH_REWARD
         if not self.amr2_reached and self.amr2_pose == self.amr2_dest:
             self.amr2_reached = True
-            print("solved amr2")
+            # print("solved amr2")
             reward += DEST_REACH_REWARD
 
         # both amrs reached destination, terminate
         if self.amr1_reached and self.amr2_reached:
             print("solved both, terminating")
+            self.solved_counter += 1
             terminated = True
 
         # truncated on step count exceeding threshold
@@ -192,6 +221,13 @@ class MarpAIGym(gym.Env):
         return terminated, truncated, reward
 
     def get_all_state(self):
+        amr1_direction = np.array(self.amr1_dest) - np.array(self.amr1_pose)
+        amr2_direction = np.array(self.amr2_dest) - np.array(self.amr2_pose)
+
+        # Normalize to get unit vectors
+        amr1_unit_vector = amr1_direction / np.linalg.norm(amr1_direction) if np.linalg.norm(amr1_direction) > 0 else np.array([0, 0])
+        amr2_unit_vector = amr2_direction / np.linalg.norm(amr2_direction) if np.linalg.norm(amr2_direction) > 0 else np.array([0, 0])
+        print(amr1_unit_vector, amr2_unit_vector)
         combined_array = np.concatenate(
             (
                 list(self.amr1_pose),
@@ -199,7 +235,9 @@ class MarpAIGym(gym.Env):
                 list(self.amr2_pose),
                 list(self.amr2_dest),
                 [self.amr1_distance_to_goal],
+                list(amr1_unit_vector),
                 [self.amr2_distance_to_goal],
+                list(amr2_unit_vector),
                 [coord for waypoint in self.amr1_options for coord in waypoint],
                 [coord for waypoint in self.amr2_options for coord in waypoint],
             )

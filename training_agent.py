@@ -32,7 +32,7 @@ def ppo_train():
         return _init 
     num_envs = 1
     env = SubprocVecEnv([make_env() for _ in range(num_envs)])
-    policy_kwargs = dict(net_arch=[128, 128])
+    policy_kwargs = dict(net_arch=[128, 128, 128, 128])
     model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, n_steps=1024, batch_size=64, n_epochs=20, verbose=1)
     save_path = os.path.join("saves", "autosave_sb_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     callback = SaveModelCallback(save_freq=100000, save_path=save_path, verbose=1)
