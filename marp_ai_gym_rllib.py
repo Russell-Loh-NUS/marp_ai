@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.legend_handler import HandlerLine2D
 import numpy as np
+import time
 import random
 import logging
 
@@ -51,7 +52,7 @@ class MarpAIGym(gym.Env):
         }
 
         self.graph = self.create_graph()
-        self.center = (2, 2)  # junction
+        self.fixed_map_junction = (2, 2)  # junction
         self.valid_waypoints = list(self.graph.keys())
 
         # level and difficulties
@@ -116,8 +117,148 @@ class MarpAIGym(gym.Env):
             (2, 1): [(2, 1), (2, 2), (2, 0)],
             (2, 0): [(2, 0), (2, 1)],
         }
+    
+    def generate_map(self, num_waypoints=20, area_size=(5, 5), min_dist=1.0, max_dist=2.0):
+        waypoints = {}
+        positions = []
+        start_time = time.time()
+        
+        try:
+            # Step 1: Generate waypoints with spacing constraint
+            while len(positions) < num_waypoints:
+                if time.time() - start_time >= 0.2:
+                    raise Exception("Timed out when generating candidates")
+                candidate = tuple(np.round(np.random.uniform(0, area_size, 2), 2))
+                if all(np.linalg.norm(np.array(candidate) - np.array(p)) > min_dist for p in positions):
+                    positions.append(candidate)
+
+            # Initialize waypoint connections
+            for pos in positions:
+                waypoints[pos] = [pos]
+
+            # Step 2: Connect waypoints with valid distances
+            for i, waypoint in enumerate(positions):
+                connections = []
+                for j, other in enumerate(positions):
+                    if i == j:
+                        continue
+                    dist = np.linalg.norm(np.array(waypoint) - np.array(other))
+                    if min_dist <= dist <= max_dist:
+                        connections.append(other)
+                waypoints[waypoint].extend(connections)
+
+            # Step 3: Ensure bidirectional connections
+            for w, conn_list in waypoints.items():
+                for conn in conn_list[1:]:
+                    if w not in waypoints[conn]:
+                        waypoints[conn].append(w)
+
+            # Step 4: Ensure full connectivity using Union-Find
+            parent = {pos: pos for pos in positions}
+            
+            def find(node):
+                if parent[node] != node:
+                    parent[node] = find(parent[node])
+                return parent[node]
+
+            def union(n1, n2):
+                root1, root2 = find(n1), find(n2)
+                if root1 != root2:
+                    parent[root2] = root1
+            
+            for w, conn_list in waypoints.items():
+                for conn in conn_list[1:]:
+                    union(w, conn)
+            
+            unique_roots = {find(node) for node in parent}
+            start_time = time.time()
+            while len(unique_roots) > 1:
+                clusters = {r: [] for r in unique_roots}
+                for node in parent:
+                    clusters[find(node)].append(node)
+                cluster_list = list(clusters.values())
+                min_dist, best_pair = float('inf'), None
+                
+                for cluster_a in cluster_list:
+                    for cluster_b in cluster_list:
+                        if cluster_a == cluster_b:
+                            continue
+                        for p1 in cluster_a:
+                            for p2 in cluster_b:
+                                if time.time() - start_time >= 0.2:
+                                    raise Exception("Timed out when joining clusters")
+                                d = np.linalg.norm(np.array(p1) - np.array(p2))
+                                if min_dist <= d <= max_dist and d < min_dist:
+                                    min_dist, best_pair = d, (p1, p2)
+                
+                if best_pair:
+                    p1, p2 = best_pair
+                    if len(waypoints[p1]) < 5 and len(waypoints[p2]) < 5:
+                        waypoints[p1].append(p2)
+                        waypoints[p2].append(p1)
+                        union(p1, p2)
+                
+                unique_roots = {find(node) for node in parent}
+            
+            # Step 5: Prune excess connections while maintaining bidirectional pruning
+            for w in list(waypoints.keys()):
+                if len(waypoints[w]) > 5:
+                    center = np.array(w)
+                    connections = waypoints[w][1:]
+                    connections.sort(key=lambda p: np.linalg.norm(np.array(p) - center))
+                    to_remove = connections[4:]
+                    waypoints[w] = [w] + connections[:4]
+                    for tr in to_remove:
+                        if w in waypoints[tr]:
+                            waypoints[tr].remove(w)
+            
+
+            # Validation
+            positions = set(waypoints.keys())
+            # Check bidirectional connections
+            for w, conn_list in waypoints.items():
+                for conn in conn_list[1:]:  # Skip self-reference
+                    if conn not in waypoints or w not in waypoints[conn]:
+                        raise Exception(f"Bidirectional connection missing between {w} and {conn}")
+            
+            # Check max connections per waypoint
+            for w, conn_list in waypoints.items():
+                if len(conn_list) > 5:  # Self + 4 connections
+                    raise Exception(f"Waypoint {w} exceeds maximum connections")
+            
+            # Check distance constraints
+            for w, conn_list in waypoints.items():
+                for conn in conn_list[1:]:
+                    dist = np.linalg.norm(np.array(w) - np.array(conn))
+                    if not (min_dist <= dist <= max_dist):
+                        raise Exception(f"Distance constraint violated between {w} and {conn}: {dist}")
+
+            # Check full connectivity using DFS
+            visited = set()
+            def dfs(node):
+                if node in visited:
+                    return
+                visited.add(node)
+                for conn in waypoints[node][1:]:  # Skip self-reference
+                    dfs(conn)
+            
+            first_node = next(iter(positions))
+            dfs(first_node)
+            
+            if visited != positions:
+                raise Exception("Graph is not fully connected")
+            
+            print("Map validation passed")
+            return waypoints
+        
+        except Exception:
+            print("Map randomization failed, retrying")
+            return self.generate_map()
 
     def init_val(self):
+        if self.selected_level >=7:
+            self.graph = self.generate_map()
+            self.valid_waypoints = list(self.graph.keys())
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
@@ -186,10 +327,10 @@ class MarpAIGym(gym.Env):
         self.episode_count += 1
 
     def pick_start_dest(self, valid_waypoints):
-        left_waypoints = sorted([wp for wp in valid_waypoints if wp[0] < self.center[0]])
-        right_waypoints = sorted([wp for wp in valid_waypoints if wp[0] > self.center[0]])
-        top_waypoints = sorted([wp for wp in valid_waypoints if wp[1] > self.center[1]], key=lambda x: x[1])
-        bottom_waypoints = sorted([wp for wp in valid_waypoints if wp[1] < self.center[1]], key=lambda x: x[1])
+        left_waypoints = sorted([wp for wp in valid_waypoints if wp[0] < self.fixed_map_junction[0]])
+        right_waypoints = sorted([wp for wp in valid_waypoints if wp[0] > self.fixed_map_junction[0]])
+        top_waypoints = sorted([wp for wp in valid_waypoints if wp[1] > self.fixed_map_junction[1]], key=lambda x: x[1])
+        bottom_waypoints = sorted([wp for wp in valid_waypoints if wp[1] < self.fixed_map_junction[1]], key=lambda x: x[1])
         amr1_start, amr1_dest, amr2_start, amr2_dest = None, None, None, None
 
         # 80% to select the same level, 20% to select a random level
@@ -315,6 +456,15 @@ class MarpAIGym(gym.Env):
             print(f"Closer to center: amr_{dest_closer_to_center}")
             if dest_closer_to_center != start_closer_to_center:
                 amr1_dest, amr2_dest = amr2_dest, amr1_dest
+        elif self.selected_level==7:
+            while True:
+                # Sample 4 unique waypoints
+                sampled = random.sample(valid_waypoints, 4)
+                amr1_start, amr1_dest, amr2_start, amr2_dest = sampled
+                # Check if all locations are unique
+                if len(set(sampled)) == 4:
+                    return amr1_start, amr1_dest, amr2_start, amr2_dest
+
         else:
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
             # TODO: this is level 6, lv7 and 8 will be implemented later
