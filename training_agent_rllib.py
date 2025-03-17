@@ -3,7 +3,7 @@ from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
 from marp_ai_gym_rllib import *
-import os 
+import os
 
 cwd = os.getcwd()
 checkpoint_path = os.path.join(cwd, "models")
@@ -38,11 +38,11 @@ tune.Tuner(
     PPO,
     param_space=config.to_dict(),
     run_config=air.RunConfig(
-        stop={"training_iteration": 1500},
+        stop={"training_iteration": 2001},
         storage_path=checkpoint_path,  # Specify the custom save directory
         checkpoint_config=air.CheckpointConfig(
             checkpoint_frequency=100,
-            checkpoint_at_end=True,   # Also save at the end of training
+            checkpoint_at_end=True,  # Also save at the end of training
         ),
     ),
 ).fit()
