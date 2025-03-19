@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.WARN)
 COLLISION_REWARD = -30
 INVALID_ACTION_REWARD = -15
 IDLE_REWARD = -1
-COMEOUT_FROM_DEST_REWARD = -10
+COMEOUT_FROM_DEST_REWARD = -15
 CYCLIC_REWARD = -1
 MOVING_CLOSER_REWARD = 10
 DEST_REACH_REWARD = 50
@@ -193,9 +193,10 @@ class MarpAIGym(gym.Env):
         amr1_start, amr1_dest, amr2_start, amr2_dest = None, None, None, None
 
         # 80% to select the same level, 20% to select a random level
-        self.selected_level = self.level
-        if random.random() > 0.8:
-            self.selected_level = random.randint(0, self.level)
+        # self.selected_level = self.level
+        # if random.random() > 0.8:
+        #     self.selected_level = random.randint(0, self.level)
+        self.selected_level = 4
         print(f"Selected level: {self.selected_level}")
 
         if self.selected_level == 0:
@@ -356,6 +357,7 @@ class MarpAIGym(gym.Env):
         return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
 
     def calculate_reward(self, amr1_next, amr2_next):
+        global COMEOUT_FROM_DEST_REWARD
         terminated = False
         truncated = False
         reward = 0.0
@@ -388,6 +390,10 @@ class MarpAIGym(gym.Env):
             if len(self.amr2_recent_poses) == CYCLIC_HISTORY_SIZE:
                 self.amr2_recent_poses.pop(0)
             self.amr2_recent_poses.append(self.amr2_pose)
+        
+        # Incentivise AMR to come out of dest if both AMRs meet
+        if self.dist(self.amr1_pose[0], self.amr1_pose[1], self.amr2_pose[0], self.amr2_pose[1]) == 1:
+            COMEOUT_FROM_DEST_REWARD = 10
 
         # terminate on collision and swap
         if self.amr1_pose == self.amr2_pose:
@@ -407,10 +413,12 @@ class MarpAIGym(gym.Env):
                 logging.info("amr 1 comeout from dest")
                 self.result["comeout_from_dest"] += 1
                 reward += COMEOUT_FROM_DEST_REWARD
+                self.amr1_reached = False
             if self.amr2_reached and self.amr2_pose != self.amr2_dest:
                 logging.info("amr 2 comeout from dest")
                 self.result["comeout_from_dest"] += 1
                 reward += COMEOUT_FROM_DEST_REWARD
+                self.amr1_reached = False
 
             # calculate distance to goal, reward for moving closer
             self.amr1_last_distance_to_goal = self.amr1_distance_to_goal
@@ -439,11 +447,14 @@ class MarpAIGym(gym.Env):
             # reward for reaching destination, but only the first time it reaches goal
             if not self.amr1_reached and self.amr1_pose == self.amr1_dest:
                 self.amr1_reached = True
+                COMEOUT_FROM_DEST_REWARD = -15 # Reset reward
+                reward += DEST_REACH_REWARD
                 logging.info("solved amr1")
             if not self.amr2_reached and self.amr2_pose == self.amr2_dest:
                 self.amr2_reached = True
-                logging.info("solved amr2")
+                COMEOUT_FROM_DEST_REWARD = -15 # Reset reward
                 reward += DEST_REACH_REWARD
+                logging.info("solved amr2")
 
             # both amrs reached destination, terminate
             if self.amr1_pose == self.amr1_dest and self.amr2_pose == self.amr2_dest:

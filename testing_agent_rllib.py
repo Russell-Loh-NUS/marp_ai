@@ -10,7 +10,7 @@ register_env(env_name, lambda config: MarpAIGym(config, render_flag=False))
 
 # Define the checkpoint path (update this to your actual checkpoint location)
 pwd = os.getcwd()
-checkpoint_path = os.path.join(pwd, "/PPO_marp_ai_env_1b59d_00000_0_2025-03-16_12-42-46/checkpoint_000014")
+checkpoint_path = os.path.join(pwd, "/PPO_2025-03-19_01-53-03\PPO_marp_ai_env_da8e5_00000_0_2025-03-19_01-53-09\checkpoint_000000")
 
 # Load the trained model
 config = (
