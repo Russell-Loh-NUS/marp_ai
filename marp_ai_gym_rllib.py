@@ -456,15 +456,6 @@ class MarpAIGym(gym.Env):
             print(f"Closer to center: amr_{dest_closer_to_center}")
             if dest_closer_to_center != start_closer_to_center:
                 amr1_dest, amr2_dest = amr2_dest, amr1_dest
-        elif self.selected_level==7:
-            while True:
-                # Sample 4 unique waypoints
-                sampled = random.sample(valid_waypoints, 4)
-                amr1_start, amr1_dest, amr2_start, amr2_dest = sampled
-                # Check if all locations are unique
-                if len(set(sampled)) == 4:
-                    return amr1_start, amr1_dest, amr2_start, amr2_dest
-
         else:
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
             # TODO: this is level 6, lv7 and 8 will be implemented later
