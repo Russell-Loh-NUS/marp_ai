@@ -89,7 +89,7 @@ class MarpAIGym(gym.Env):
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr share path, with deadlock
-            6: {"level_up_threshold": 400, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest
+            6: {"level_up_threshold": 5000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest
             7: {"level_up_threshold": 5000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest with dynamic obstacles
             8: {
                 "level_up_threshold": 5000,
