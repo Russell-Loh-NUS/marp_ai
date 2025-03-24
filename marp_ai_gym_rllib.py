@@ -10,6 +10,7 @@ import numpy as np
 import time
 import random
 import logging
+import copy
 
 logging.basicConfig(level=logging.WARN)
 
@@ -51,7 +52,8 @@ class MarpAIGym(gym.Env):
             "max_timestep": 0,
         }
 
-        self.graph = self.create_graph()
+        self.default_graph = self.create_graph()
+        self.graph = copy.deepcopy(self.default_graph)
         self.fixed_map_junction = (2, 2)  # junction
         self.num_dynamic_obstacles = 0
         self.valid_waypoints = list(self.graph.keys())
@@ -259,7 +261,7 @@ class MarpAIGym(gym.Env):
             return self.generate_map()
 
     def init_val(self):
-        self.graph = self.create_graph()
+        self.graph = copy.deepcopy(self.default_graph)
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
@@ -336,8 +338,12 @@ class MarpAIGym(gym.Env):
         print(f"Selected level: {self.selected_level}")
 
         if self.selected_level >= 6:
-            if self.selected_level >= 7:
-                self.graph = self.generate_map()
+            if self.selected_level == 7:
+                self.num_dynamic_obstacles = 3 # Controls the number of obstacles
+            elif self.selected_level >= 8:
+                self.default_graph = self.generate_map()
+                self.graph = copy.deepcopy(self.default_graph)
+                print(self.graph)
             valid_waypoints = list(self.graph.keys())
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
             # TODO: this is level 6 and level 7, level 8 will be implemented later
@@ -469,9 +475,6 @@ class MarpAIGym(gym.Env):
             print(f"Closer to center: amr_{dest_closer_to_center}")
             if dest_closer_to_center != start_closer_to_center:
                 amr1_dest, amr2_dest = amr2_dest, amr1_dest
-        elif self.selected_level == 7:
-            self.num_dynamic_obstacles = 3 # Controls the number of obstacles
-            # TODO: this is level 7, lv8 and 9 will be implemented later
         return amr1_start, amr1_dest, amr2_start, amr2_dest
 
     def pad_waypoints(self, waypoints, max_size=5, pad_value=(-100, -100)):
@@ -617,7 +620,7 @@ class MarpAIGym(gym.Env):
         return terminated, truncated, reward
     
     def randomise_obstacles(self, num_obstacles=0):
-        new_graph = self.create_graph()
+        new_graph = copy.deepcopy(self.default_graph)
 
         # Filter out des and AMR pose from graph choices
         graph_choice = new_graph.copy()
