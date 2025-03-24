@@ -89,7 +89,7 @@ class MarpAIGym(gym.Env):
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr share path, with deadlock
-            6: {"level_up_threshold": 5000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest
+            6: {"level_up_threshold": 2000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest
             7: {
                 "level_up_threshold": 5000,
                 "last_solved_episode": 0,
@@ -118,7 +118,7 @@ class MarpAIGym(gym.Env):
             (2, 0): [(2, 0), (2, 1)],
         }
     
-    def generate_map(self, num_waypoints=20, area_size=(5, 5), min_dist=1.0, max_dist=2.0):
+    def generate_map(self, num_waypoints=10, area_size=(5, 5), min_dist=1.0, max_dist=2.0):
         waypoints = {}
         positions = []
         start_time = time.time()
@@ -256,9 +256,6 @@ class MarpAIGym(gym.Env):
             return self.generate_map()
 
     def init_val(self):
-        if self.selected_level >=7:
-            self.graph = self.generate_map()
-            self.valid_waypoints = list(self.graph.keys())
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
@@ -286,7 +283,7 @@ class MarpAIGym(gym.Env):
             )
             print(f"result: {self.result}")
             self.picked_amr1_pose, self.picked_amr1_dest, self.picked_amr2_pose, self.picked_amr2_dest = (
-                self.pick_start_dest(self.valid_waypoints)
+                self.pick_start_dest()
             )
             print(f"amr1: {self.picked_amr1_pose} -> {self.picked_amr1_dest}")
             print(f"amr2: {self.picked_amr2_pose} -> {self.picked_amr2_dest}")
@@ -326,18 +323,29 @@ class MarpAIGym(gym.Env):
         self.amr2_recent_poses = []
         self.episode_count += 1
 
-    def pick_start_dest(self, valid_waypoints):
-        left_waypoints = sorted([wp for wp in valid_waypoints if wp[0] < self.fixed_map_junction[0]])
-        right_waypoints = sorted([wp for wp in valid_waypoints if wp[0] > self.fixed_map_junction[0]])
-        top_waypoints = sorted([wp for wp in valid_waypoints if wp[1] > self.fixed_map_junction[1]], key=lambda x: x[1])
-        bottom_waypoints = sorted([wp for wp in valid_waypoints if wp[1] < self.fixed_map_junction[1]], key=lambda x: x[1])
-        amr1_start, amr1_dest, amr2_start, amr2_dest = None, None, None, None
-
+    def pick_start_dest(self):
         # 80% to select the same level, 20% to select a random level
         self.selected_level = self.level
         if random.random() > 0.8:
             self.selected_level = random.randint(0, self.level)
         print(f"Selected level: {self.selected_level}")
+
+        if self.selected_level >= 6:
+            if self.selected_level >= 7:
+                self.graph = self.generate_map()
+            valid_waypoints = list(self.graph.keys())
+            amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
+            # TODO: this is level 6 and level 7, level 8 will be implemented later
+            return amr1_start, amr1_dest, amr2_start, amr2_dest
+
+        valid_waypoints = list(self.graph.keys())
+        left_waypoints = sorted([wp for wp in valid_waypoints if wp[0] < self.fixed_map_junction[0]])
+        right_waypoints = sorted([wp for wp in valid_waypoints if wp[0] > self.fixed_map_junction[0]])
+        top_waypoints = sorted([wp for wp in valid_waypoints if wp[1] > self.fixed_map_junction[1]], key=lambda x: x[1])
+        bottom_waypoints = sorted(
+            [wp for wp in valid_waypoints if wp[1] < self.fixed_map_junction[1]], key=lambda x: x[1]
+        )
+        amr1_start, amr1_dest, amr2_start, amr2_dest = None, None, None, None
 
         if self.selected_level == 0:
             # both amr don't cross the junction
@@ -456,9 +464,6 @@ class MarpAIGym(gym.Env):
             print(f"Closer to center: amr_{dest_closer_to_center}")
             if dest_closer_to_center != start_closer_to_center:
                 amr1_dest, amr2_dest = amr2_dest, amr1_dest
-        else:
-            amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
-            # TODO: this is level 6, lv7 and 8 will be implemented later
         return amr1_start, amr1_dest, amr2_start, amr2_dest
 
     def pad_waypoints(self, waypoints, max_size=5, pad_value=(-100, -100)):
