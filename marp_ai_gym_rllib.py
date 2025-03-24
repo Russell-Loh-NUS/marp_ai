@@ -343,7 +343,6 @@ class MarpAIGym(gym.Env):
             elif self.selected_level >= 8:
                 self.default_graph = self.generate_map()
                 self.graph = copy.deepcopy(self.default_graph)
-                print(self.graph)
             valid_waypoints = list(self.graph.keys())
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
             # TODO: this is level 6 and level 7, level 8 will be implemented later
