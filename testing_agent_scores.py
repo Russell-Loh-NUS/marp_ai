@@ -1,12 +1,17 @@
 import gymnasium as gym
 from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
+from ray.rllib.models import ModelCatalog
+from masked_fcnet_model import MaskedFCNet 
 from marp_ai_gym_rllib import *
 import os
 import matplotlib.pyplot as plt
 
+# Register the custom model
+ModelCatalog.register_custom_model("masked_fcnet", MaskedFCNet)
+
 # === User Inputs Test Parameters==
-max_level = 8
+max_level = 9
 episodes_per_level = 1000
 
 # Register the custom environment
@@ -15,7 +20,7 @@ register_env(env_name, lambda config: MarpAIGym(config, render_flag=False))
 
 # Define the checkpoint path (update this to your actual checkpoint location)
 pwd = os.getcwd()
-checkpoint_path = os.path.join(pwd, "models/PPO_2025-03-24_10-34-27/PPO_marp_ai_env_8355b_00000_0_2025-03-24_10-34-30/checkpoint_000000")
+checkpoint_path = os.path.join(pwd, "models/PPO_2025-03-28_23-25-10/PPO_marp_ai_env_d7500_00000_0_2025-03-28_23-25-12/checkpoint_000008")
 
 # Load the trained model
 config = (
@@ -36,6 +41,7 @@ print(f"\n=== Testing PPO Model across Levels 0 to {max_level} ===\n")
 for level in range(max_level + 1):
     env = MarpAIGym(render_flag=False)
     env.level = level
+    env.selected_level = level
 
     solved_cases = 0
     collision_cases = 0
