@@ -56,7 +56,7 @@ class MarpAIGym(gym.Env):
             "max_timestep": 0,
         }
         # level and difficulties
-        self.level = 7
+        self.level = 0
         self.selected_level = 0
         
         self.graph = self.create_graph()
