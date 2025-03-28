@@ -29,7 +29,7 @@ CYCLIC_HISTORY_SIZE = 3
 MAX_TIMESTEP = 20
 OBSERVATION_SPACE = spaces.Dict({
     "obs": spaces.Box(
-        low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, -1, -1] + [-100] * 20, dtype=np.float32),
+        low=np.array([-1, -1, -1, -1, -1, -1, -1, -1, 0, -1, -1, 0, -1, -1] + [-100] * 20, dtype=np.float32),
         high=np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 1, 1, 10, 1, 1] + [10] * 20, dtype=np.float32),
         shape=(34,),
         dtype=np.float32
@@ -56,7 +56,7 @@ class MarpAIGym(gym.Env):
             "max_timestep": 0,
         }
         # level and difficulties
-        self.level = 0
+        self.level = 7
         self.selected_level = 0
         
         self.graph = self.create_graph()
@@ -66,37 +66,37 @@ class MarpAIGym(gym.Env):
 
         self.experiences = {
             0: {
-                "level_up_threshold": 200,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr1 and amr2 dont the junction
             1: {
-                "level_up_threshold": 400,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # one amr cross the junction
             2: {
-                "level_up_threshold": 200,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr cross the junction, but not turning
             3: {
-                "level_up_threshold": 200,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr cross the junction, and turning
             4: {
-                "level_up_threshold": 400,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr share path, but no deadlock
             5: {
-                "level_up_threshold": 400,
+                "level_up_threshold": 1500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr share path, with deadlock
             6: {
-                "level_up_threshold": 5000,
+                "level_up_threshold": 2500,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # random spawn and dest
@@ -310,7 +310,7 @@ class MarpAIGym(gym.Env):
 
         # Increase difficulty
         if (
-            self.level != 8
+            self.level != 7
             and self.experiences[self.level]["solved_counter"] >= self.experiences[self.level]["level_up_threshold"]
         ):
             self.level += 1
@@ -709,6 +709,14 @@ class MarpAIGym(gym.Env):
         )
         observations = combined_array
         action_mask = self.get_action_mask()
+        if observations.shape[0] != 34:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Obs error")
+            print(f"amr1_curr: {self.amr1_pose}, amr1_dest: {self.amr1_dest}")
+            print(f"amr2_curr: {self.amr2_pose}, amr2_dest: {self.amr2_dest}")
+            print(observations)
+        if action_mask.shape[0] != 25:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! action_mask error")
+            print(action_mask)
         return {"obs": observations, "action_mask": action_mask}, self.reward, self.terminated, self.truncated, {}
 
     def step(self, action):

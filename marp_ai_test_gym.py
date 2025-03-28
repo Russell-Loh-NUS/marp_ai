@@ -24,11 +24,16 @@ DEST_REACH_REWARD = 50
 # others
 CYCLIC_HISTORY_SIZE = 3
 MAX_TIMESTEP = 20
-OBSERVATION_SPACE = spaces.Box(
-    low=np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, -1, -1] + [-100] * 20, dtype=np.float32),
-    high=np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 1, 1, 10, 1, 1] + [10] * 20, dtype=np.float32),
-    shape=(34,),
-    dtype=np.float32,
+OBSERVATION_SPACE = spaces.Dict(
+    {
+        "obs": spaces.Box(
+            low=np.array([-1, -1, -1, -1, -1, -1, -1, -1, 0, -1, -1, 0, -1, -1] + [-100] * 20, dtype=np.float32),
+            high=np.array([10, 10, 10, 10, 10, 10, 10, 10, 10, 1, 1, 10, 1, 1] + [10] * 20, dtype=np.float32),
+            shape=(34,),
+            dtype=np.float32,
+        ),
+        "action_mask": spaces.Box(low=0, high=1, shape=(25,), dtype=np.int8),
+    }
 )
 ACTION_SPACE = spaces.Discrete(25)
 
@@ -50,15 +55,11 @@ class MarpAIGym(gym.Env):
             "max_timestep": 0,
         }
 
-        self.graph = self.create_graph()
-        self.center = (2, 2)  # junction
-        self.valid_waypoints = list(self.graph.keys())
-
         # level and difficulties
-        self.level = 8
-        self.selected_level = 8
+        self.level = 9
+        self.selected_level = 9
         self.experiences = {
-            8: {"level_up_threshold": 0, "last_solved_episode": 0, "solved_counter": 0},  # continuous
+            9: {"level_up_threshold": 0, "last_solved_episode": 0, "solved_counter": 0},  # continuous
         }
 
         self.last_generate_data_when_stuck = 0
@@ -67,48 +68,54 @@ class MarpAIGym(gym.Env):
         self.episode_count = 0
 
     def create_graph(self):
-        # return {
-        #     (0, 2): [(0, 2), (1, 2)],
-        #     (1, 2): [(1, 2), (2, 2), (0, 2)],
-        #     (2, 2): [(2, 2), (2, 3), (3, 2), (2, 1), (1, 2)],
-        #     (3, 2): [(3, 2), (4, 2), (2, 2)],
-        #     (4, 2): [(4, 2), (5, 2), (3, 2)],
-        #     (5, 2): [(5, 2), (6, 2), (4, 2)],
-        #     (6, 2): [(6, 2), (5, 2)],
-        #     (2, 3): [(2, 3), (2, 4), (2, 2)],
-        #     (2, 4): [(2, 4), (2, 5), (2, 3)],
-        #     (2, 5): [(2, 5), (2, 4)],
-        #     (2, 1): [(2, 1), (2, 2), (2, 0)],
-        #     (2, 0): [(2, 0), (2, 1)],
-        # }
-
         return {
-            (0.4, 2.5): [(0.4, 2.5), (1.8, 2.4)],
-            (1.8, 2.4): [(1.8, 2.4), (2.1, 2.9), (0.4, 2.5)],
-            (2.1, 2.9): [(2.1, 2.9), (2.8, 3.2), (3.8, 2.2), (2.3, 1.1), (1.8, 2.4)],
-            (3.8, 2.2): [(3.8, 2.2), (4.9, 2.5), (2.1, 2.9)],
-            (4.9, 2.5): [(4.9, 2.5), (5.3, 2.1), (3.8, 2.2)],
-            (5.3, 2.1): [(5.3, 2.1), (6.0, 2.2), (4.9, 2.5)],
-            (6.0, 2.2): [(6.0, 2.2), (5.3, 2.1)],
-            (2.8, 3.2): [(2.8, 3.2), (2.0, 4.3), (2.1, 2.9)],
-            (2.0, 4.3): [(2.0, 4.3), (2.3, 5.3), (2.8, 3.2)],
-            (2.3, 5.3): [(2.3, 5.3), (2.0, 4.3)],
-            (2.3, 1.1): [(2.3, 1.1), (2.1, 2.9), (2.9, 0.1)],
-            (2.9, 0.1): [(2.9, 0.1), (2.3, 1.1)],
+            (0, 2): [(0, 2), (1, 2)],
+            (1, 2): [(1, 2), (2, 2), (0, 2)],
+            (2, 2): [(2, 2), (2, 3), (3, 2), (2, 1), (1, 2)],
+            (3, 2): [(3, 2), (4, 2), (2, 2)],
+            (4, 2): [(4, 2), (5, 2), (3, 2)],
+            (5, 2): [(5, 2), (6, 2), (4, 2)],
+            (6, 2): [(6, 2), (5, 2)],
+            (2, 3): [(2, 3), (2, 4), (2, 2)],
+            (2, 4): [(2, 4), (2, 5), (2, 3)],
+            (2, 5): [(2, 5), (2, 4)],
+            (2, 1): [(2, 1), (2, 2), (2, 0)],
+            (2, 0): [(2, 0), (2, 1)],
         }
+
+    def create_noisy_graph(self):
+        base_graph = self.create_graph()
+
+        noise_range = (-0.5, 0.5)
+
+        def add_noise(point):
+            return (point[0] + random.uniform(*noise_range), point[1] + random.uniform(*noise_range))
+
+        noisy_graph = {}
+        point_map = {}
+
+        # Generate noisy waypoints
+        for key in base_graph.keys():
+            noisy_key = add_noise(key)
+            point_map[key] = noisy_key
+
+        # Generate noisy connections
+        for key, neighbors in base_graph.items():
+            noisy_neighbors = [point_map[n] for n in neighbors]
+            noisy_graph[point_map[key]] = noisy_neighbors
+
+        return noisy_graph
+
     def init_val(self):
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
         self.amr2_closest_distance_to_goal = 100.0
 
-        # Generate new data if stuck for 300 episodes
-        if self.episode_count - self.last_generate_data_when_stuck >= 300:
-            print("Stuck for 300 episodes, generating new data")
-            self.generate_new_data = True
-            self.last_generate_data_when_stuck = self.episode_count
 
         if self.generate_new_data:
+            self.graph = self.create_noisy_graph()
+            self.valid_waypoints = list(self.graph.keys())
             print("=============================================================================")
             print(
                 f"generating new data, episdode count: {self.episode_count}, level: {self.level}, experience: {self.experiences}"
@@ -137,6 +144,9 @@ class MarpAIGym(gym.Env):
             self.picked_amr1_dest, self.picked_amr2_dest = random.sample(valid_waypoints_excluding_current, 2)
             print(f"amr1: {self.picked_amr1_pose} -> {self.picked_amr1_dest}")
             print(f"amr2: {self.picked_amr2_pose} -> {self.picked_amr2_dest}")
+            for key, value in self.graph.items():
+                print(f"{key}: {value}")
+                print("***")
             self.generate_new_dest = False
 
         self.amr1_pose, self.amr1_dest, self.amr2_pose, self.amr2_dest = (
@@ -198,7 +208,8 @@ class MarpAIGym(gym.Env):
                 [coord for waypoint in self.amr2_options for coord in waypoint],
             )
         )
-        return combined_array, {}
+        action_mask = self.get_action_mask()
+        return {"obs": combined_array, "action_mask": action_mask}, {}
 
     def dist(self, x1, y1, x2, y2):
         return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
@@ -243,11 +254,14 @@ class MarpAIGym(gym.Env):
             self.result["collision"] += 1
             reward += COLLISION_REWARD
             terminated = True
+            self.generate_new_data = True
+
         if self.amr1_last_pose == self.amr2_pose and self.amr1_pose == self.amr2_last_pose:
             logging.info("swap, terminated")
             self.result["swap"] += 1
             reward += COLLISION_REWARD
             terminated = True
+            self.generate_new_data = True
 
         else:
             # reward for coming out from destination
@@ -335,7 +349,17 @@ class MarpAIGym(gym.Env):
             )
         )
         observations = combined_array
-        return (observations, self.reward, self.terminated, self.truncated, {})
+        action_mask = self.get_action_mask()
+        if observations.shape[0] != 34:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Obs error")
+            print(f"amr1_curr: {self.amr1_pose}, amr1_dest: {self.amr1_dest}")
+            print(f"amr2_curr: {self.amr2_pose}, amr2_dest: {self.amr2_dest}")
+            print(observations)
+        if action_mask.shape[0] != 25:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! action_mask error")
+            print(action_mask)
+        return {"obs": observations, "action_mask": action_mask}, self.reward, self.terminated, self.truncated, {}
+
 
     def step(self, action):
         self.step_count += 1
@@ -343,20 +367,26 @@ class MarpAIGym(gym.Env):
         # Convert the flat action back to amr1 and amr2 actions
         amr1_action = action % 5  # Integer division to get amr1's action
         amr2_action = action // 5  # Modulo operation to get amr2's action
-        logging.info(f"amr1_action: {amr1_action}, amr2_action: {amr2_action}")
+        print(f"amr1_action: {amr1_action}, amr2_action: {amr2_action}")
         amr1_next = self.amr1_options[amr1_action]
         amr2_next = self.amr2_options[amr2_action]
 
         self.terminated, self.truncated, self.reward = self.calculate_reward(amr1_next, amr2_next)
 
-        self.amr1_options = self.pad_waypoints(self.graph.get(self.amr1_pose, []))
-        self.amr2_options = self.pad_waypoints(self.graph.get(self.amr2_pose, []))
+        self.amr1_options = self.pad_waypoints(self.graph[self.amr1_pose])
+        self.amr2_options = self.pad_waypoints(self.graph[self.amr2_pose])
         if self.renderflag:
             self.render()
 
         self.episode_total_score += self.reward
         return self.get_all_state()
-
+    
+    def get_action_mask(self):
+        amr1_mask = [0 if wp == (-100, -100) else 1 for wp in self.amr1_options]
+        amr2_mask = [0 if wp == (-100, -100) else 1 for wp in self.amr2_options]
+        action_mask = np.array([amr1_mask[i % 5] * amr2_mask[i // 5] for i in range(25)], dtype=np.int8)
+        return action_mask
+    
     def render(self):
         if not hasattr(self, "_initialized_render"):
             plt.ion()  # Turn on interactive mode
@@ -405,9 +435,27 @@ class MarpAIGym(gym.Env):
             color="red",
             bbox=dict(facecolor="white", alpha=0.7, edgecolor="red"),
         )
-        solved_text = self.ax.text(
+        invalid_action_text = self.ax.text(
             0.02,
             0.90,
+            f"Invalid Actions: {self.result['invalid_action']}",
+            transform=self.ax.transAxes,
+            fontsize=12,
+            color="orange",
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="orange"),
+        )
+        timeout_text = self.ax.text(
+            0.02,
+            0.85,
+            f"Timeout: {self.result['max_timestep']}",
+            transform=self.ax.transAxes,
+            fontsize=12,
+            color="orange",
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="orange"),
+        )
+        solved_text = self.ax.text(
+            0.02,
+            0.80,
             f"Solved: {self.result['dest_reach']}",
             transform=self.ax.transAxes,
             fontsize=12,
