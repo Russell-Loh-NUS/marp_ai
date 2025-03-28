@@ -1,8 +1,14 @@
 import gymnasium as gym
 from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
+from ray.rllib.models import ModelCatalog
+from masked_fcnet_model import MaskedFCNet 
 from marp_ai_gym_rllib import *
 import os
+import matplotlib.pyplot as plt
+
+# Register the custom model
+ModelCatalog.register_custom_model("masked_fcnet", MaskedFCNet)
 
 # Register the custom environment
 env_name = "marp_ai_env"
