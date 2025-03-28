@@ -12,7 +12,7 @@ ModelCatalog.register_custom_model("masked_fcnet", MaskedFCNet)
 
 # === User Inputs Test Parameters==
 max_level = 9
-episodes_per_level = 50
+episodes_per_level = 1000
 
 # Register the custom environment
 env_name = "marp_ai_env"
@@ -39,7 +39,7 @@ average_rewards = []
 
 print(f"\n=== Testing PPO Model across Levels 0 to {max_level} ===\n")
 for level in range(max_level + 1):
-    env = MarpAIGym(render_flag=True)
+    env = MarpAIGym(render_flag=False)
     env.level = level
     env.selected_level = level
 
