@@ -24,6 +24,7 @@ MOVING_CLOSER_REWARD = 10
 DEST_REACH_REWARD = 50
 
 # others
+NUM_DYNAMIC_OBSTACLE = 3
 CYCLIC_HISTORY_SIZE = 3
 MAX_TIMESTEP = 20
 OBSERVATION_SPACE = spaces.Box(
@@ -52,8 +53,7 @@ class MarpAIGym(gym.Env):
             "max_timestep": 0,
         }
 
-        self.default_graph = self.create_graph()
-        self.graph = copy.deepcopy(self.default_graph)
+        self.graph = self.create_graph()
         self.fixed_map_junction = (2, 2)  # junction
         self.num_dynamic_obstacles = 0
         self.valid_waypoints = list(self.graph.keys())
@@ -92,25 +92,40 @@ class MarpAIGym(gym.Env):
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # both amr share path, with deadlock
-            6: {"level_up_threshold": 5000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest
-            7: {"level_up_threshold": 5000, "last_solved_episode": 0, "solved_counter": 0},  # random spawn and dest with dynamic obstacles
+            6: {
+                "level_up_threshold": 5000,
+                "last_solved_episode": 0,
+                "solved_counter": 0,
+            },  # random spawn and dest
+            7: {
+                "level_up_threshold": 5000,
+                "last_solved_episode": 0,
+                "solved_counter": 0,
+            },  # random spawn and dest with noisy_graph
             8: {
                 "level_up_threshold": 5000,
                 "last_solved_episode": 0,
                 "solved_counter": 0,
             },  # random spawn and dest, with random map
-            9: {"level_up_threshold": 0, "last_solved_episode": 0, "solved_counter": 0},  # continuous
+            9: {
+                "level_up_threshold": 5000,
+                "last_solved_episode": 0,
+                "solved_counter": 0,
+            },  # random_map + dynamic obstacles
+            10: {
+                "level_up_threshold": 5000,
+                "last_solved_episode": 0,
+                "solved_counter": 0,
+            },  # continuous
         }
 
-        self.last_generate_data_when_stuck = 0
         self.generate_new_data = True
         self.episode_count = 0
 
     def create_graph(self):
         return {
             (0, 2): [(0, 2), (1, 2)],
-            (1, 1): [(1, 1), (1, 2), (2, 1)],
-            (1, 2): [(1, 2), (2, 2), (0, 2), (1, 1)],
+            (1, 2): [(1, 2), (2, 2), (0, 2)],
             (2, 2): [(2, 2), (2, 3), (3, 2), (2, 1), (1, 2)],
             (3, 2): [(3, 2), (4, 2), (2, 2)],
             (4, 2): [(4, 2), (5, 2), (3, 2)],
@@ -119,15 +134,37 @@ class MarpAIGym(gym.Env):
             (2, 3): [(2, 3), (2, 4), (2, 2)],
             (2, 4): [(2, 4), (2, 5), (2, 3)],
             (2, 5): [(2, 5), (2, 4)],
-            (2, 1): [(2, 1), (2, 2), (2, 0), (1, 1)],
+            (2, 1): [(2, 1), (2, 2), (2, 0)],
             (2, 0): [(2, 0), (2, 1)],
         }
-    
+
+    def create_noisy_graph(self):
+        base_graph = self.create_graph()
+        noise_range = (-0.5, 0.5)
+
+        def add_noise(point):
+            return (point[0] + random.uniform(*noise_range), point[1] + random.uniform(*noise_range))
+
+        noisy_graph = {}
+        point_map = {}
+
+        # Generate noisy waypoints
+        for key in base_graph.keys():
+            noisy_key = add_noise(key)
+            point_map[key] = noisy_key
+
+        # Generate noisy connections
+        for key, neighbors in base_graph.items():
+            noisy_neighbors = [point_map[n] for n in neighbors]
+            noisy_graph[point_map[key]] = noisy_neighbors
+
+        return noisy_graph
+
     def generate_map(self, num_waypoints=10, area_size=(5, 5), min_dist=1.0, max_dist=2.0):
         waypoints = {}
         positions = []
         start_time = time.time()
-        
+
         try:
             # Step 1: Generate waypoints with spacing constraint
             while len(positions) < num_waypoints:
@@ -160,7 +197,7 @@ class MarpAIGym(gym.Env):
 
             # Step 4: Ensure full connectivity using Union-Find
             parent = {pos: pos for pos in positions}
-            
+
             def find(node):
                 if parent[node] != node:
                     parent[node] = find(parent[node])
@@ -170,11 +207,11 @@ class MarpAIGym(gym.Env):
                 root1, root2 = find(n1), find(n2)
                 if root1 != root2:
                     parent[root2] = root1
-            
+
             for w, conn_list in waypoints.items():
                 for conn in conn_list[1:]:
                     union(w, conn)
-            
+
             unique_roots = {find(node) for node in parent}
             start_time = time.time()
             while len(unique_roots) > 1:
@@ -182,8 +219,8 @@ class MarpAIGym(gym.Env):
                 for node in parent:
                     clusters[find(node)].append(node)
                 cluster_list = list(clusters.values())
-                min_dist, best_pair = float('inf'), None
-                
+                min_dist, best_pair = float("inf"), None
+
                 for cluster_a in cluster_list:
                     for cluster_b in cluster_list:
                         if cluster_a == cluster_b:
@@ -195,16 +232,16 @@ class MarpAIGym(gym.Env):
                                 d = np.linalg.norm(np.array(p1) - np.array(p2))
                                 if min_dist <= d <= max_dist and d < min_dist:
                                     min_dist, best_pair = d, (p1, p2)
-                
+
                 if best_pair:
                     p1, p2 = best_pair
                     if len(waypoints[p1]) < 5 and len(waypoints[p2]) < 5:
                         waypoints[p1].append(p2)
                         waypoints[p2].append(p1)
                         union(p1, p2)
-                
+
                 unique_roots = {find(node) for node in parent}
-            
+
             # Step 5: Prune excess connections while maintaining bidirectional pruning
             for w in list(waypoints.keys()):
                 if len(waypoints[w]) > 5:
@@ -216,7 +253,6 @@ class MarpAIGym(gym.Env):
                     for tr in to_remove:
                         if w in waypoints[tr]:
                             waypoints[tr].remove(w)
-            
 
             # Validation
             positions = set(waypoints.keys())
@@ -225,12 +261,12 @@ class MarpAIGym(gym.Env):
                 for conn in conn_list[1:]:  # Skip self-reference
                     if conn not in waypoints or w not in waypoints[conn]:
                         raise Exception(f"Bidirectional connection missing between {w} and {conn}")
-            
+
             # Check max connections per waypoint
             for w, conn_list in waypoints.items():
                 if len(conn_list) > 5:  # Self + 4 connections
                     raise Exception(f"Waypoint {w} exceeds maximum connections")
-            
+
             # Check distance constraints
             for w, conn_list in waypoints.items():
                 for conn in conn_list[1:]:
@@ -240,42 +276,38 @@ class MarpAIGym(gym.Env):
 
             # Check full connectivity using DFS
             visited = set()
+
             def dfs(node):
                 if node in visited:
                     return
                 visited.add(node)
                 for conn in waypoints[node][1:]:  # Skip self-reference
                     dfs(conn)
-            
+
             first_node = next(iter(positions))
             dfs(first_node)
-            
+
             if visited != positions:
                 raise Exception("Graph is not fully connected")
-            
+
             print("Map validation passed")
             return waypoints
-        
+
         except Exception:
             print("Map randomization failed, retrying")
             return self.generate_map()
 
     def init_val(self):
-        self.graph = copy.deepcopy(self.default_graph)
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
         self.amr2_closest_distance_to_goal = 100.0
 
-        # Generate new data if stuck for 300 episodes
-        if self.episode_count - self.last_generate_data_when_stuck >= 300:
-            print("Stuck for 300 episodes, generating new data")
-            self.generate_new_data = True
-            self.last_generate_data_when_stuck = self.episode_count
+        self.generate_new_data = True
 
         # Increase difficulty
         if (
-            self.level != 9
+            self.level != 8
             and self.experiences[self.level]["solved_counter"] >= self.experiences[self.level]["level_up_threshold"]
         ):
             self.level += 1
@@ -330,24 +362,26 @@ class MarpAIGym(gym.Env):
         self.episode_count += 1
 
     def pick_start_dest(self):
-        self.num_dynamic_obstacles = 0
         # 80% to select the same level, 20% to select a random level
         self.selected_level = self.level
         if random.random() > 0.8:
             self.selected_level = random.randint(0, self.level)
         print(f"Selected level: {self.selected_level}")
 
-        if self.selected_level >= 6:
+        if self.selected_level >= 7:
             if self.selected_level == 7:
-                self.num_dynamic_obstacles = 3 # Controls the number of obstacles
-            elif self.selected_level >= 8:
-                self.default_graph = self.generate_map()
-                self.graph = copy.deepcopy(self.default_graph)
+                self.graph = self.create_noisy_graph()
+            if self.selected_level == 8:
+                self.graph = self.generate_map()
+            if self.selected_level == 9:
+                self.graph = self.generate_map()
+                self.num_dynamic_obstacles = NUM_DYNAMIC_OBSTACLE  # Controls the number of obstacles
             valid_waypoints = list(self.graph.keys())
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
-            # TODO: this is level 6 and level 7, level 8 will be implemented later
             return amr1_start, amr1_dest, amr2_start, amr2_dest
 
+        self.num_dynamic_obstacles = 0
+        self.graph = self.create_graph()
         valid_waypoints = list(self.graph.keys())
         left_waypoints = sorted([wp for wp in valid_waypoints if wp[0] < self.fixed_map_junction[0]])
         right_waypoints = sorted([wp for wp in valid_waypoints if wp[0] > self.fixed_map_junction[0]])
@@ -474,6 +508,9 @@ class MarpAIGym(gym.Env):
             print(f"Closer to center: amr_{dest_closer_to_center}")
             if dest_closer_to_center != start_closer_to_center:
                 amr1_dest, amr2_dest = amr2_dest, amr1_dest
+        elif self.selected_level == 6:
+            # random spawn and dest
+            amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
         return amr1_start, amr1_dest, amr2_start, amr2_dest
 
     def pad_waypoints(self, waypoints, max_size=5, pad_value=(-100, -100)):
@@ -617,9 +654,9 @@ class MarpAIGym(gym.Env):
             self.result["max_timestep"] += 1
             truncated = True
         return terminated, truncated, reward
-    
+
     def randomise_obstacles(self, num_obstacles=0):
-        new_graph = copy.deepcopy(self.default_graph)
+        new_graph = copy.deepcopy(self.graph)
 
         # Filter out des and AMR pose from graph choices
         graph_choice = new_graph.copy()
@@ -632,13 +669,13 @@ class MarpAIGym(gym.Env):
             obstacle_key, _ = random.choice(list(graph_choice.items()))
             new_graph = self.remove_node(new_graph, obstacle_key)
         return new_graph
-    
+
     def remove_node(self, graph, node):
-        if node in graph: # Check if node has already been removed
-            for link in graph[node]: # Remove links to node
-                if link != node: # Only remove link if it is not itself
+        if node in graph:  # Check if node has already been removed
+            for link in graph[node]:  # Remove links to node
+                if link != node:  # Only remove link if it is not itself
                     graph[link].remove(node)
-            graph.pop(node) # Remove node from graph
+            graph.pop(node)  # Remove node from graph
         return graph
 
     def get_all_state(self):
@@ -680,9 +717,9 @@ class MarpAIGym(gym.Env):
 
         self.terminated, self.truncated, self.reward = self.calculate_reward(amr1_next, amr2_next)
 
-        #If dynamic obstacle is toggled, randomise node to be removed from graph
+        # If dynamic obstacle is toggled, randomise node to be removed from graph
         if self.num_dynamic_obstacles > 0:
-            if random.random() > 0.7: # 30% chance of changing obstacle location
+            if random.random() > 0.7:  # 30% chance of changing obstacle location
                 self.graph = self.randomise_obstacles(self.num_dynamic_obstacles)
         self.amr1_options = self.pad_waypoints(self.graph.get(self.amr1_pose, []))
         self.amr2_options = self.pad_waypoints(self.graph.get(self.amr2_pose, []))
