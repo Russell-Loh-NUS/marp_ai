@@ -30,7 +30,7 @@ config = (
             "fcnet_activation": "relu",
         },
         lr=5e-4,
-        train_batch_size=800,
+        train_batch_size=1600,
         sgd_minibatch_size=200,
         num_sgd_iter=10,
         clip_param=0.2,
@@ -49,10 +49,10 @@ tune.Tuner(
     PPO,  
     param_space=config.to_dict(),
     run_config=air.RunConfig(
-        stop={"training_iteration": 4001},
+        stop={"training_iteration": 50001},
         storage_path=checkpoint_path,  # Specify the custom save directory
         checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=100,
+            checkpoint_frequency=500,
             checkpoint_at_end=True, # Also save at the end of training
         ),
     ),
