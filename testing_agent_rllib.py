@@ -2,7 +2,7 @@ import gymnasium as gym
 from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
-from masked_fcnet_model import MaskedFCNet 
+from masked_fcnet_model import MaskedFCNet
 from marp_ai_test_gym import *
 import os
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ register_env(env_name, lambda config: MarpAIGym(config, render_flag=False))
 
 # Define the checkpoint path (update this to your actual checkpoint location)
 pwd = os.getcwd()
-checkpoint_path = os.path.join(pwd, "/PPO_marp_ai_env_1b59d_00000_0_2025-03-16_12-42-46/checkpoint_000014")
+checkpoint_path = os.path.join(pwd, "sample_model")
 
 # Load the trained model
 config = (

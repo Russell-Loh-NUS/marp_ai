@@ -53,6 +53,8 @@ class MarpAIGym(gym.Env):
             "idle": 0,
             "dest_reach": 0,
             "max_timestep": 0,
+            "current_streak": 0,
+            "longest_streak": 0,
         }
 
         # level and difficulties
@@ -255,6 +257,7 @@ class MarpAIGym(gym.Env):
             reward += COLLISION_REWARD
             terminated = True
             self.generate_new_data = True
+            self.result["current_streak"] = 0
 
         if self.amr1_last_pose == self.amr2_pose and self.amr1_pose == self.amr2_last_pose:
             logging.info("swap, terminated")
@@ -262,6 +265,7 @@ class MarpAIGym(gym.Env):
             reward += COLLISION_REWARD
             terminated = True
             self.generate_new_data = True
+            self.result["current_streak"] = 0
 
         else:
             # reward for coming out from destination
@@ -311,6 +315,9 @@ class MarpAIGym(gym.Env):
             if self.amr1_pose == self.amr1_dest and self.amr2_pose == self.amr2_dest:
                 reward += DEST_REACH_REWARD
                 self.result["dest_reach"] += 1
+                self.result["current_streak"] += 1
+                if self.result["current_streak"] > self.result["longest_streak"]:
+                    self.result["longest_streak"] = self.result["current_streak"]
                 self.experiences[self.selected_level]["solved_counter"] += 1
                 reward += DEST_REACH_REWARD
                 self.experiences[self.selected_level]["last_solved_episode"] = self.episode_count
@@ -322,6 +329,8 @@ class MarpAIGym(gym.Env):
         if self.step_count >= MAX_TIMESTEP:
             self.result["max_timestep"] += 1
             truncated = True
+            self.result["current_streak"] = 0
+            self.generate_new_data = True
         return terminated, truncated, reward
 
     def get_all_state(self):
@@ -435,18 +444,9 @@ class MarpAIGym(gym.Env):
             color="red",
             bbox=dict(facecolor="white", alpha=0.7, edgecolor="red"),
         )
-        invalid_action_text = self.ax.text(
-            0.02,
-            0.90,
-            f"Invalid Actions: {self.result['invalid_action']}",
-            transform=self.ax.transAxes,
-            fontsize=12,
-            color="orange",
-            bbox=dict(facecolor="white", alpha=0.7, edgecolor="orange"),
-        )
         timeout_text = self.ax.text(
             0.02,
-            0.85,
+            0.90,
             f"Timeout: {self.result['max_timestep']}",
             transform=self.ax.transAxes,
             fontsize=12,
@@ -455,8 +455,26 @@ class MarpAIGym(gym.Env):
         )
         solved_text = self.ax.text(
             0.02,
-            0.80,
+            0.85,
             f"Solved: {self.result['dest_reach']}",
+            transform=self.ax.transAxes,
+            fontsize=12,
+            color="green",
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="green"),
+        )
+        curr_streak_text = self.ax.text(
+            0.02,
+            0.80,
+            f"Current Streak: {self.result['current_streak']}",
+            transform=self.ax.transAxes,
+            fontsize=12,
+            color="green",
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="green"),
+        )
+        longest_streak_text = self.ax.text(
+            0.02,
+            0.75,
+            f"Longest Streak: {self.result['longest_streak']}",
             transform=self.ax.transAxes,
             fontsize=12,
             color="green",
