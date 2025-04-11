@@ -6,5 +6,7 @@ dependencies:
   - pip:
     - gymnasium
     - numpy
-    - stable_baselines3
     - torch
+    - ray[rllib,tune,serve]
+    - matplotlib
+    - aiohttp_cors==0.7.0

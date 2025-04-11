@@ -1,51 +1,59 @@
-#!/usr/bin/python3
-
-from marp_ai_gym import *
-from stable_baselines3 import DQN, PPO
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import BaseCallback
-import datetime
 import os
+from ray import air, tune
+from ray.tune.registry import register_env
+from ray.rllib.models import ModelCatalog
+from ray.rllib.algorithms.ppo import PPO, PPOConfig  # Use PPO class directly
+from marp_ai_gym import MarpAIGym
+from masked_fcnet_model import MaskedFCNet
 
-class SaveModelCallback(BaseCallback):
-    def __init__(self, save_freq: int, save_path: str, verbose=0):
-        super(SaveModelCallback, self).__init__(verbose)
-        self.save_freq = save_freq  # Save frequency in timesteps
-        self.save_path = save_path    # Path to save the model
+# Register custom model
+ModelCatalog.register_custom_model("masked_fcnet", MaskedFCNet)
 
-    def _on_step(self) -> bool:
-        # Check if the current step is a multiple of the save frequency
-        if self.n_calls % self.save_freq == 0:
-            # Save the model
-            self.model.save(f"{self.save_path}/autosave_step_{self.num_timesteps}")
-            if self.verbose > 0:
-                print(f"Model saved at timestep {self.num_timesteps}")
-        return True
-    
-def ppo_train():
-    def make_env():
-        def _init():
-            env = MarpAIGym(render_flag=False)
-            env = Monitor(env)
-            return env
-        return _init 
-    num_envs = 1
-    env = SubprocVecEnv([make_env() for _ in range(num_envs)])
-    policy_kwargs = dict(net_arch=[128, 128, 128, 128])
-    model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, n_steps=1024, batch_size=64, n_epochs=20, verbose=1)
-    save_path = os.path.join("saves", "autosave_sb_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
-    callback = SaveModelCallback(save_freq=100000, save_path=save_path, verbose=1)
-    model.learn(total_timesteps=1000000, callback=callback)
-    model.save("ppo_marp_ai_model")
+# Register custom environment
+env_name = "marp_ai_env"
+register_env(env_name, lambda config: MarpAIGym(config=config, render_flag=False))
 
-def dqn_train():
-    # this algo isnt performing well, need to further tune hyperparameters
-    env = MarpAIGym()
-    env = DummyVecEnv([lambda: env])
-    model = DQN("MlpPolicy", env, verbose=1, learning_starts=1000, buffer_size=10000, batch_size=64, gamma=0.99)
-    model.learn(total_timesteps=1000000)
-    model.save("dqn_marp_ai_model")
+# Path to save models
+cwd = os.getcwd()
+checkpoint_path = os.path.join(cwd, "models")
 
-if __name__ == "__main__":
-    ppo_train()
+# Define PPO config with action-masked custom model
+config = (
+    PPOConfig()
+    .environment(env=env_name)
+    .framework("torch")
+    .rollouts(num_rollout_workers=8)  # Adjust based on your CPU
+    .training(
+        model={
+            "custom_model": "masked_fcnet",
+            "fcnet_hiddens": [128, 128, 128, 128],
+            "fcnet_activation": "relu",
+        },
+        lr=5e-4,
+        train_batch_size=1600,
+        sgd_minibatch_size=200,
+        num_sgd_iter=10,
+        clip_param=0.2,
+        gamma=0.99,
+        lambda_=0.95,
+        use_gae=True,
+        vf_loss_coeff=1.0,
+        entropy_coeff=0.01,
+    )
+)
+config.preprocessor_pref = None
+config.model["_disable_preprocessor_api"] = True
+
+# Run training using Ray Tune 
+tune.Tuner(
+    PPO,  
+    param_space=config.to_dict(),
+    run_config=air.RunConfig(
+        stop={"training_iteration": 50001},
+        storage_path=checkpoint_path,  # Specify the custom save directory
+        checkpoint_config=air.CheckpointConfig(
+            checkpoint_frequency=500,
+            checkpoint_at_end=True, # Also save at the end of training
+        ),
+    ),
+).fit()

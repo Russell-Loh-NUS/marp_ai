@@ -1,43 +1,48 @@
-#!/usr/bin/python3
-
-from marp_ai_gym import *
-import numpy as np
-from stable_baselines3 import DQN, PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
+import gymnasium as gym
+from ray.rllib.algorithms.ppo import PPOConfig, PPO
+from ray.tune.registry import register_env
+from ray.rllib.models import ModelCatalog
+from masked_fcnet_model import MaskedFCNet
+from marp_ai_test_gym import *
 import os
+import matplotlib.pyplot as plt
 
-def ppo_test():
-    env = MarpAIGym(render_flag=True)  # Create the environment
-    gym_env = DummyVecEnv([lambda: env])  # Use DummyVecEnv for vectorized environments
-    cwd = os.getcwd()
-    model_path = os.path.join(cwd, "saves", "sample_model.zip")
-    model = PPO.load(model_path)  # Load the trained model
-    # Testing the agent
-    n_episodes = 10  # Number of episodes to run
-    scores = []  # Initialize a list to store episode scores
+# Register the custom model
+ModelCatalog.register_custom_model("masked_fcnet", MaskedFCNet)
 
-    for episode in range(n_episodes):
-        observation = gym_env.reset()  # Reset the environment for a new episode
-        done = False
-        score = 0
+# Register the custom environment
+env_name = "marp_ai_env"
+register_env(env_name, lambda config: MarpAIGym(config, render_flag=False))
 
-        while not done:
-            action, _states = model.predict(observation)  # Get the action from the model
-            observation, reward, done, info = gym_env.step(action)  # Step the environment
-            score += reward  # Accumulate score
-            if done:
-                print(f"Episode {episode + 1}: Reward= {score}")
-                input("Press Enter to continue")
+# Define the checkpoint path (update this to your actual checkpoint location)
+pwd = os.getcwd()
+checkpoint_path = os.path.join(pwd, "sample_model")
 
-        scores.append(score)  # Add episode score to the scores list
-        print(f"Episode {episode + 1}: Reward= {score}")
+# Load the trained model
+config = (
+    PPOConfig()
+    .environment(env=env_name)
+    .framework("torch")
+    .rollouts(num_rollout_workers=0)  # No workers needed for testing
+)
 
-    # Calculate and print average reward
-    average_reward = np.mean(scores)
-    print(f"Average Reward over {n_episodes} episodes: {average_reward}")
+algo = PPO.from_checkpoint(checkpoint_path)
 
-    # End of the testing
-    gym_env.close()  # Close the environment window if applicable
+# Create the environment for testing
+env = MarpAIGym(render_flag=True)
 
-if __name__ == "__main__":
-    ppo_test()
+while True:
+    # Run a test episode
+    obs, _ = env.reset()
+    done = False
+
+    while not done:
+        action = algo.compute_single_action(obs)  # Compute action for single agent
+        obs, reward, done, truncated, info = env.step(action)
+        done = done or truncated
+        print(f"Action: {action}")
+        print(f"Reward: {reward}")
+        print(f"obs: {obs}")
+        # input("Press Enter to continue...")
+
+env.close()
