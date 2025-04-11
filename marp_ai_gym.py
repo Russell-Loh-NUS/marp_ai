@@ -368,6 +368,7 @@ class MarpAIGym(gym.Env):
         self.episode_count += 1
 
     def pick_start_dest(self):
+        self.selected_level = self.level
         # 80% to select the same level, 20% to select a random level
         if random.random() > 0.8:
             self.selected_level = random.randint(0, self.level)
