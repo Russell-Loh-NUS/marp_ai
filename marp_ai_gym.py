@@ -59,7 +59,8 @@ class MarpAIGym(gym.Env):
         self.level = 0
         self.selected_level = 0
         
-        self.graph = self.create_graph()
+        self.default_graph = self.create_graph()
+        self.graph = copy.deepcopy(self.default_graph)
         self.fixed_map_junction = (2, 2)  # junction
         self.num_dynamic_obstacles = 0
         self.valid_waypoints = list(self.graph.keys())
@@ -301,6 +302,8 @@ class MarpAIGym(gym.Env):
             return self.generate_map()
 
     def init_val(self):
+        self.graph = copy.deepcopy(self.default_graph)
+        
         self.amr1_last_pose = (-100, -100)
         self.amr2_last_pose = (-100, -100)
         self.amr1_closest_distance_to_goal = 100.0
@@ -366,7 +369,6 @@ class MarpAIGym(gym.Env):
 
     def pick_start_dest(self):
         # 80% to select the same level, 20% to select a random level
-        self.selected_level = self.level
         if random.random() > 0.8:
             self.selected_level = random.randint(0, self.level)
         print(f"Selected level: {self.selected_level}")
@@ -375,9 +377,11 @@ class MarpAIGym(gym.Env):
             if self.selected_level == 7:
                 self.graph = self.create_noisy_graph()
             if self.selected_level == 8:
-                self.graph = self.generate_map()
+                self.default_graph = self.generate_map()
+                self.graph = copy.deepcopy(self.default_graph)
             if self.selected_level == 9:
-                self.graph = self.generate_map()
+                self.default_graph = self.generate_map()
+                self.graph = copy.deepcopy(self.default_graph)
                 self.num_dynamic_obstacles = NUM_DYNAMIC_OBSTACLE  # Controls the number of obstacles
             valid_waypoints = list(self.graph.keys())
             amr1_start, amr1_dest, amr2_start, amr2_dest = random.sample(valid_waypoints, 4)
@@ -661,7 +665,7 @@ class MarpAIGym(gym.Env):
         return terminated, truncated, reward
 
     def randomise_obstacles(self, num_obstacles=0):
-        new_graph = copy.deepcopy(self.graph)
+        new_graph = copy.deepcopy(self.default_graph)
 
         # Filter out des and AMR pose from graph choices
         graph_choice = new_graph.copy()

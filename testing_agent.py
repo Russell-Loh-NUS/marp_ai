@@ -3,7 +3,7 @@ from ray.rllib.algorithms.ppo import PPOConfig, PPO
 from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from masked_fcnet_model import MaskedFCNet
-from marp_ai_test_gym import *
+from marp_ai_gym import *
 import os
 import matplotlib.pyplot as plt
 
