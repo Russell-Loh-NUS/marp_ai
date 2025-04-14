@@ -1,0 +1,84 @@
+Sample Model (50001 iterations Trained up to level 6) - model_000
+Threshold - 1500 (Level 1 - 5) and 2500 (Level 6)
+Outcome: Acceptable
+
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        100.00          0.00               175.96
+1        93.80           5.90               179.17
+2        91.10           8.60               194.64
+3        84.60           14.90              183.13
+4        80.70           18.80              173.58
+5        71.10           27.20              138.90
+6        83.20           16.30              172.32
+7        79.80           19.00              161.14
+8        17.90           42.30              17.41
+9        18.30           58.60              16.41
+
+
+1000 Iterations (Trained with level 8 and 9) - model_001
+Level Threshold - 200,400 tuned according to how easy it was solved
+Outcome: Poor
+
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        22.40           75.60              28.86
+1        7.10            90.40              7.45
+2        3.50            91.90              16.55
+3        2.20            93.60              13.68
+4        1.20            98.30              2.00
+5        1.30            98.10              -1.36
+6        3.70            94.00              11.94
+7        3.60            94.20              10.89
+8        2.80            42.00              -19.84
+9        7.10            68.00              -7.44
+
+1000 Iterations (Trained up to level 6) - model_002
+Level Threshold - 200,400 tuned according to how easy it was solved.
+Outcome: Acceptable
+
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        92.00           7.70               178.56
+1        88.80           10.90              178.69
+2        79.30           20.30              171.51
+3        74.70           24.50              163.04
+4        64.20           34.20              137.29
+5        46.60           50.80              98.53
+6        74.80           23.50              153.55
+7        70.40           26.90              145.07
+8        18.70           56.50              21.16
+9        18.50           61.20              19.61
+
+1000 Iterations (Trained up to level 7 (noisy map)) - model_003
+Level Threshold - 200,400 tuned according to how easy it was solved.
+Outcome: Acceptable
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        84.50           10.90              158.19
+1        77.30           17.90              151.39
+2        59.10           39.30              127.24
+3        50.00           48.60              102.97
+4        37.90           59.80              75.19
+5        14.30           83.30              35.01
+6        51.20           42.00              105.44
+7        45.70           42.60              91.30
+8        15.10           67.40              21.22
+9        15.10           70.10              14.19
+
+
+1000 Iterations (Trained only on level 7 (noisy map)) - model_004
+Level Threshold - 200,400 tuned according to how easy it was solved.
+Outcome: Acceptable
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        94.40           4.30               187.13
+1        92.30           5.50               190.95
+2        87.20           11.50              193.63
+3        84.70           13.70              188.47
+4        77.60           20.50              172.21
+5        75.10           22.30              161.21
+6        87.70           10.30              185.15
+7        59.20           28.40              114.11
+8        20.40           52.80              26.98
+9        22.10           59.40              23.12
