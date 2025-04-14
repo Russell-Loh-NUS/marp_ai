@@ -82,3 +82,19 @@ Level    Solve Rate (%)  Collision Rate (%) Avg Reward
 7        59.20           28.40              114.11
 8        20.40           52.80              26.98
 9        22.10           59.40              23.12
+
+1000 Iterations (Trained only on level 1) - model_005
+Level Threshold - 200,400 tuned according to how easy it was solved.
+Outcome: Poor
+=== Summary Scores ===
+Level    Solve Rate (%)  Collision Rate (%) Avg Reward
+0        89.80           9.00               178.60
+1        84.50           14.40              176.56
+2        65.70           32.50              144.95
+3        56.80           40.50              122.17
+4        51.00           44.80              106.28
+5        17.90           78.40              33.04
+6        58.60           35.70              119.27
+7        52.30           39.30              102.44
+8        17.00           58.50              17.91
+9        16.90           59.80              12.64
